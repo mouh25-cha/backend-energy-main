@@ -1,3 +1,5 @@
+
+// 📦 الاستدعاءات الأولية
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
@@ -9,30 +11,31 @@ const morgan = require("morgan");
 const swaggerUi = require("swagger-ui-express");
 const swaggerJsDoc = require("swagger-jsdoc");
 const Joi = require("joi");
+const { OpenAI } = require("openai");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// 🔐 الأمان والوسيطات
 app.use(cors());
 app.use(express.json());
 app.use(helmet());
 app.use(morgan("combined"));
 
-// Limiteur de requêtes
+// ⚙️ تحديد حد للطلبات
 const limiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
+    windowMs: 15 * 60 * 1000,
     max: 1000,
     message: "🚫 تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا."
 });
 app.use(limiter);
 
-// Connexion MongoDB (sans options obsolètes)
+// 🛢️ الاتصال بقاعدة البيانات MongoDB
 mongoose.connect(process.env.MONGO_URI)
-    .then(() => console.log("💾 متصل بقاعدة البيانات MongoDB"))
+    .then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
     .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// Schéma des données
+// 📊 نموذج البيانات
 const EnergySchema = new mongoose.Schema({
     temperature: Number,
     humidity: Number,
@@ -47,18 +50,17 @@ const EnergySchema = new mongoose.Schema({
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
 
-// Connexion au broker MQTT
+// 📡 الاتصال بخادم MQTT
 const client = mqtt.connect(process.env.MQTT_BROKER);
 
 client.on("connect", () => {
-    console.log("🔗 متصل بخادم MQTT");
+    console.log("🔗 تم الاتصال بخادم MQTT");
     client.subscribe("maison/energie");
 });
 
 client.on("message", (topic, message) => {
     try {
         const data = JSON.parse(message.toString());
-
         const newEntry = new EnergyModel({
             temperature: data.temperature ?? null,
             humidity: data.humidity ?? null,
@@ -73,24 +75,45 @@ client.on("message", (topic, message) => {
 
         newEntry.save()
             .then(() => console.log("✅ تم حفظ بيانات MQTT بنجاح:", newEntry))
-            .catch(err => console.error("❌ خطأ أثناء حفظ البيانات:", err));
-
+            .catch(err => console.error("❌ خطأ أثناء الحفظ:", err));
     } catch (error) {
-        console.error("⚠️ خطأ في تحويل رسالة MQTT إلى JSON:", error);
+        console.error("⚠️ خطأ في تحويل البيانات من JSON:", error);
     }
 });
 
-// Routes HTTP
+// 🤖 إعداد Chatbot مع OpenAI
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
+
+async function askOpenAI(question) {
+    try {
+        const response = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+                { role: "system", content: "أنت مساعد ذكي مختص في ترشيد استهلاك الطاقة." },
+                { role: "user", content: question }
+            ]
+        });
+        return response.choices[0].message.content.trim();
+    } catch (error) {
+        console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.response?.data || error.message);
+        throw new Error("حدث خطأ أثناء الاتصال بـ OpenAI.");
+    }
+}
+
+// 📡 المسارات API
+
 app.get("/", (req, res) => {
-    res.send("🚀 الخادم يعمل بنجاح!");
+    res.send("🚀 الخادم يعمل!");
 });
 
 app.get("/energy", async (req, res) => {
     try {
-        const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(250);
+        const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(2000);
         res.json(data);
     } catch (error) {
-        res.status(500).send("خطأ في جلب البيانات.");
+        res.status(500).send("❌ خطأ في جلب البيانات.");
     }
 });
 
@@ -115,11 +138,38 @@ app.post("/energy", async (req, res) => {
         await newData.save();
         res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
     } catch (error) {
-        res.status(500).send("خطأ أثناء حفظ البيانات.");
+        res.status(500).send("❌ خطأ أثناء الحفظ.");
     }
 });
 
-// Swagger API Docs
+// 💬 مسار روبوت المحادثة
+app.post("/chatbot", async (req, res) => {
+    const { question } = req.body;
+    if (!question) return res.status(400).send("يرجى إدخال سؤال.");
+
+    try {
+        const answer = await askOpenAI(question);
+        res.json({ answer });
+    } catch (error) {
+        res.status(500).send("❌ خطأ أثناء الحصول على إجابة من OpenAI.");
+    }
+});
+
+// 🧪 مسار اختبار OpenAI
+app.get("/test-openai", async (req, res) => {
+    try {
+        const response = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [{ role: "user", content: "مرحبا" }]
+        });
+        res.send(response.choices[0].message.content);
+    } catch (error) {
+        console.error("❌ خطأ في الاتصال بـ OpenAI:", error.message);
+        res.status(500).send("فشل في الاتصال بـ OpenAI");
+    }
+});
+
+// 📚 توثيق Swagger
 const swaggerOptions = {
     definition: {
         openapi: "3.0.0",
@@ -135,7 +185,7 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// Démarrage du serveur
+// 🚀 تشغيل الخادم
 app.listen(PORT, () => {
     console.log(`🚀 الخادم يعمل على http://localhost:${PORT}`);
 });
