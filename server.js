@@ -1,4 +1,3 @@
-
 // 📦 الاستدعاءات الأولية
 require("dotenv").config();
 const express = require("express");
@@ -35,7 +34,7 @@ mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
     .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// 📊 نموذج البيانات
+// 📊 نموذج البيانات - محدث مع puissance
 const EnergySchema = new mongoose.Schema({
     temperature: Number,
     humidity: Number,
@@ -46,6 +45,7 @@ const EnergySchema = new mongoose.Schema({
     waterFlow: Number,
     gasDetected: Number,
     level: Number,
+    puissance: Number, // 🆕 أضف هذا
     timestamp: { type: Date, default: Date.now }
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
@@ -61,6 +61,8 @@ client.on("connect", () => {
 client.on("message", (topic, message) => {
     try {
         const data = JSON.parse(message.toString());
+        const puissance = (data.sct013 ?? 0) * (data.voltage ?? 0); // 🧮 حساب الطاقة
+
         const newEntry = new EnergyModel({
             temperature: data.temperature ?? null,
             humidity: data.humidity ?? null,
@@ -70,7 +72,8 @@ client.on("message", (topic, message) => {
             sct013: data.sct013 ?? null,
             waterFlow: data.waterFlow ?? null,
             gasDetected: data.gasDetected ?? null,
-            level: data.level ?? null
+            level: data.level ?? null,
+            puissance: puissance // 🆕 إضافة الطاقة المحسوبة
         });
 
         newEntry.save()
@@ -103,7 +106,6 @@ async function askOpenAI(question) {
 }
 
 // 📡 المسارات API
-
 app.get("/", (req, res) => {
     res.send("🚀 الخادم يعمل!");
 });
@@ -134,7 +136,10 @@ app.post("/energy", async (req, res) => {
     if (error) return res.status(400).send(error.details[0].message);
 
     try {
-        const newData = new EnergyModel(req.body);
+        const newData = new EnergyModel({
+            ...req.body,
+            puissance: (req.body.sct013 ?? 0) * (req.body.voltage ?? 0) // 🧮 حساب الطاقة عند إدخال البيانات يدويًا
+        });
         await newData.save();
         res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
     } catch (error) {
