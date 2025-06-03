@@ -45,20 +45,18 @@ const EnergySchema = new mongoose.Schema({
     waterFlow: Number,
     gasDetected: Number,
     level: Number,
-    puissance: Number, // 🆕 الطاقة المحسوبة
-    delayMs: Number,    // 🆕 التأخير بين الإرسال والاستلام
+    puissance: Number,
+    delayMs: Number,
     timestamp: { type: Date, default: Date.now }
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
 
 // 📡 الاتصال بخادم MQTT
 const client = mqtt.connect(process.env.MQTT_BROKER);
-
 client.on("connect", () => {
     console.log("🔗 تم الاتصال بخادم MQTT");
     client.subscribe("maison/energie");
 });
-
 client.on("message", async (topic, message) => {
     try {
         const data = JSON.parse(message.toString());
@@ -67,17 +65,8 @@ client.on("message", async (topic, message) => {
         const delayMs = now - dataTime;
 
         const puissance = (data.sct013 ?? 0) * (data.voltage ?? 0);
-
         const newEntry = new EnergyModel({
-            temperature: data.temperature ?? null,
-            humidity: data.humidity ?? null,
-            voltage: data.voltage ?? null,
-            current_20A: data.current_20A ?? null,
-            current_30A: data.current_30A ?? null,
-            sct013: data.sct013 ?? null,
-            waterFlow: data.waterFlow ?? null,
-            gasDetected: data.gasDetected ?? null,
-            level: data.level ?? null,
+            ...data,
             puissance,
             delayMs,
             timestamp: data.timestamp ?? new Date()
@@ -90,11 +79,8 @@ client.on("message", async (topic, message) => {
     }
 });
 
-// 🤖 إعداد Chatbot مع OpenAI
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY
-});
-
+// 🤖 OpenAI إعداد Chatbot
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 async function askOpenAI(question) {
     try {
         const response = await openai.chat.completions.create({
@@ -112,15 +98,13 @@ async function askOpenAI(question) {
 }
 
 // 📡 المسارات API
-app.get("/", (req, res) => {
-    res.send("🚀 الخادم يعمل!");
-});
+app.get("/", (req, res) => res.send("🚀 الخادم يعمل!"));
 
 app.get("/energy", async (req, res) => {
     try {
         const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(2000);
         res.json(data);
-    } catch (error) {
+    } catch {
         res.status(500).send("❌ خطأ في جلب البيانات.");
     }
 });
@@ -145,25 +129,24 @@ app.post("/energy", async (req, res) => {
         const newData = new EnergyModel(req.body);
         await newData.save();
         res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
-    } catch (error) {
+    } catch {
         res.status(500).send("❌ خطأ أثناء الحفظ.");
     }
 });
 
-// 💬 مسار روبوت المحادثة
+// 💬 روبوت المحادثة
 app.post("/chatbot", async (req, res) => {
     const { question } = req.body;
     if (!question) return res.status(400).send("يرجى إدخال سؤال.");
-
     try {
         const answer = await askOpenAI(question);
         res.json({ answer });
-    } catch (error) {
+    } catch {
         res.status(500).send("❌ خطأ أثناء الحصول على إجابة من OpenAI.");
     }
 });
 
-// 🧪 مسار اختبار OpenAI
+// 🧪 اختبار اتصال OpenAI
 app.get("/test-openai", async (req, res) => {
     try {
         const response = await openai.chat.completions.create({
