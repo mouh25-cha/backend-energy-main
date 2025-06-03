@@ -10,7 +10,7 @@ const morgan = require("morgan");
 const swaggerUi = require("swagger-ui-express");
 const swaggerJsDoc = require("swagger-jsdoc");
 const Joi = require("joi");
-const { OpenAI } = require("openai");
+const axios = require("axios"); // ✅ بدل OpenAI
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -53,10 +53,12 @@ const EnergyModel = mongoose.model("Energy", EnergySchema);
 
 // 📡 الاتصال بخادم MQTT
 const client = mqtt.connect(process.env.MQTT_BROKER);
+
 client.on("connect", () => {
     console.log("🔗 تم الاتصال بخادم MQTT");
     client.subscribe("maison/energie");
 });
+
 client.on("message", async (topic, message) => {
     try {
         const data = JSON.parse(message.toString());
@@ -65,8 +67,17 @@ client.on("message", async (topic, message) => {
         const delayMs = now - dataTime;
 
         const puissance = (data.sct013 ?? 0) * (data.voltage ?? 0);
+
         const newEntry = new EnergyModel({
-            ...data,
+            temperature: data.temperature ?? null,
+            humidity: data.humidity ?? null,
+            voltage: data.voltage ?? null,
+            current_20A: data.current_20A ?? null,
+            current_30A: data.current_30A ?? null,
+            sct013: data.sct013 ?? null,
+            waterFlow: data.waterFlow ?? null,
+            gasDetected: data.gasDetected ?? null,
+            level: data.level ?? null,
             puissance,
             delayMs,
             timestamp: data.timestamp ?? new Date()
@@ -79,32 +90,42 @@ client.on("message", async (topic, message) => {
     }
 });
 
-// 🤖 OpenAI إعداد Chatbot
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-async function askOpenAI(question) {
+// 🤖 دالة الاتصال بـ DeepSeek
+async function askDeepSeek(question) {
     try {
-        const response = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
-            messages: [
-                { role: "system", content: "أنت مساعد ذكي مختص في ترشيد استهلاك الطاقة." },
-                { role: "user", content: question }
-            ]
-        });
-        return response.choices[0].message.content.trim();
+        const response = await axios.post(
+            "https://api.deepseek.com/v1/chat/completions",
+            {
+                model: "deepseek-chat",
+                messages: [
+                    { role: "system", content: "أنت مساعد ذكي في ترشيد استهلاك الطاقة." },
+                    { role: "user", content: question }
+                ]
+            },
+            {
+                headers: {
+                    "Authorization": `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+                    "Content-Type": "application/json"
+                }
+            }
+        );
+        return response.data.choices[0].message.content.trim();
     } catch (error) {
-        console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.response?.data || error.message);
-        throw new Error("حدث خطأ أثناء الاتصال بـ OpenAI.");
+        console.error("❌ خطأ أثناء الاتصال بـ DeepSeek:", error.response?.data || error.message);
+        throw new Error("فشل الاتصال بـ DeepSeek.");
     }
 }
 
 // 📡 المسارات API
-app.get("/", (req, res) => res.send("🚀 الخادم يعمل!"));
+app.get("/", (req, res) => {
+    res.send("🚀 الخادم يعمل!");
+});
 
 app.get("/energy", async (req, res) => {
     try {
         const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(2000);
         res.json(data);
-    } catch {
+    } catch (error) {
         res.status(500).send("❌ خطأ في جلب البيانات.");
     }
 });
@@ -129,34 +150,21 @@ app.post("/energy", async (req, res) => {
         const newData = new EnergyModel(req.body);
         await newData.save();
         res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
-    } catch {
+    } catch (error) {
         res.status(500).send("❌ خطأ أثناء الحفظ.");
     }
 });
 
-// 💬 روبوت المحادثة
+// 💬 مسار دردشة Chatbot مع DeepSeek
 app.post("/chatbot", async (req, res) => {
     const { question } = req.body;
-    if (!question) return res.status(400).send("يرجى إدخال سؤال.");
-    try {
-        const answer = await askOpenAI(question);
-        res.json({ answer });
-    } catch {
-        res.status(500).send("❌ خطأ أثناء الحصول على إجابة من OpenAI.");
-    }
-});
+    if (!question) return res.status(400).send("يرجى إرسال سؤال.");
 
-// 🧪 اختبار اتصال OpenAI
-app.get("/test-openai", async (req, res) => {
     try {
-        const response = await openai.chat.completions.create({
-            model: "gpt-3.5-turbo",
-            messages: [{ role: "user", content: "مرحبا" }]
-        });
-        res.send(response.choices[0].message.content);
+        const answer = await askDeepSeek(question);
+        res.json({ answer });
     } catch (error) {
-        console.error("❌ خطأ في الاتصال بـ OpenAI:", error.message);
-        res.status(500).send("فشل في الاتصال بـ OpenAI");
+        res.status(500).send("❌ حدث خطأ أثناء معالجة السؤال.");
     }
 });
 
