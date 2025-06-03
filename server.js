@@ -63,7 +63,7 @@ client.on("message", async (topic, message) => {
     try {
         const data = JSON.parse(message.toString());
         const now = Date.now();
-        const dataTime = new Date(data.timestamp).getTime(); // تأكد أن ESP32 يرسل "timestamp"
+        const dataTime = new Date(data.timestamp).getTime();
         const delayMs = now - dataTime;
 
         const puissance = (data.sct013 ?? 0) * (data.voltage ?? 0);
@@ -88,4 +88,112 @@ client.on("message", async (topic, message) => {
     } catch (error) {
         console.error("⚠️ خطأ أثناء معالجة رسالة MQTT:", error);
     }
+});
+
+// 🤖 إعداد Chatbot مع OpenAI
+const openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY
+});
+
+async function askOpenAI(question) {
+    try {
+        const response = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [
+                { role: "system", content: "أنت مساعد ذكي مختص في ترشيد استهلاك الطاقة." },
+                { role: "user", content: question }
+            ]
+        });
+        return response.choices[0].message.content.trim();
+    } catch (error) {
+        console.error("❌ خطأ أثناء الاتصال بـ OpenAI:", error.response?.data || error.message);
+        throw new Error("حدث خطأ أثناء الاتصال بـ OpenAI.");
+    }
+}
+
+// 📡 المسارات API
+app.get("/", (req, res) => {
+    res.send("🚀 الخادم يعمل!");
+});
+
+app.get("/energy", async (req, res) => {
+    try {
+        const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(2000);
+        res.json(data);
+    } catch (error) {
+        res.status(500).send("❌ خطأ في جلب البيانات.");
+    }
+});
+
+app.post("/energy", async (req, res) => {
+    const schema = Joi.object({
+        temperature: Joi.number(),
+        humidity: Joi.number(),
+        voltage: Joi.number(),
+        current_20A: Joi.number(),
+        current_30A: Joi.number(),
+        sct013: Joi.number(),
+        waterFlow: Joi.number(),
+        gasDetected: Joi.number(),
+        level: Joi.number()
+    });
+
+    const { error } = schema.validate(req.body);
+    if (error) return res.status(400).send(error.details[0].message);
+
+    try {
+        const newData = new EnergyModel(req.body);
+        await newData.save();
+        res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
+    } catch (error) {
+        res.status(500).send("❌ خطأ أثناء الحفظ.");
+    }
+});
+
+// 💬 مسار روبوت المحادثة
+app.post("/chatbot", async (req, res) => {
+    const { question } = req.body;
+    if (!question) return res.status(400).send("يرجى إدخال سؤال.");
+
+    try {
+        const answer = await askOpenAI(question);
+        res.json({ answer });
+    } catch (error) {
+        res.status(500).send("❌ خطأ أثناء الحصول على إجابة من OpenAI.");
+    }
+});
+
+// 🧪 مسار اختبار OpenAI
+app.get("/test-openai", async (req, res) => {
+    try {
+        const response = await openai.chat.completions.create({
+            model: "gpt-3.5-turbo",
+            messages: [{ role: "user", content: "مرحبا" }]
+        });
+        res.send(response.choices[0].message.content);
+    } catch (error) {
+        console.error("❌ خطأ في الاتصال بـ OpenAI:", error.message);
+        res.status(500).send("فشل في الاتصال بـ OpenAI");
+    }
+});
+
+// 📚 توثيق Swagger
+const swaggerOptions = {
+    definition: {
+        openapi: "3.0.0",
+        info: {
+            title: "API إدارة الطاقة وكشف الغاز",
+            version: "1.0.0",
+            description: "API لجمع بيانات استهلاك الطاقة والمياه وكشف الغاز"
+        },
+        servers: [{ url: `http://localhost:${PORT}` }]
+    },
+    apis: ["server.js"]
+};
+const swaggerDocs = swaggerJsDoc(swaggerOptions);
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
+
+// 🚀 تشغيل الخادم
+app.listen(PORT, () => {
+    console.log(`🚀 الخادم يعمل على http://localhost:${PORT}`);
 });
