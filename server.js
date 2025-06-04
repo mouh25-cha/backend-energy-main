@@ -15,7 +15,7 @@ const axios = require("axios");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// 🔐 الأمان والوسيطات
+// 🔐 إعدادات الأمان والوسيطات
 app.use(cors());
 app.use(express.json());
 app.use(helmet());
@@ -29,12 +29,15 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// 🛢️ الاتصال بقاعدة البيانات MongoDB
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
-  .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
+// 🛢️ الاتصال بقاعدة بيانات MongoDB
+mongoose.connect(process.env.MONGO_URI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true
+})
+.then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
+.catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// 📊 نموذج البيانات
+// 📊 نموذج بيانات الطاقة
 const EnergySchema = new mongoose.Schema({
   temperature: Number,
   humidity: Number,
@@ -56,7 +59,9 @@ const client = mqtt.connect(process.env.MQTT_BROKER);
 
 client.on("connect", () => {
   console.log("🔗 تم الاتصال بخادم MQTT");
-  client.subscribe("maison/energie");
+  client.subscribe("maison/energie", err => {
+    if (err) console.error("❌ فشل الاشتراك:", err);
+  });
 });
 
 client.on("message", async (topic, message) => {
@@ -69,15 +74,7 @@ client.on("message", async (topic, message) => {
     const puissance = (data.sct013 ?? 0) * (data.voltage ?? 0);
 
     const newEntry = new EnergyModel({
-      temperature: data.temperature ?? null,
-      humidity: data.humidity ?? null,
-      voltage: data.voltage ?? null,
-      current_20A: data.current_20A ?? null,
-      current_30A: data.current_30A ?? null,
-      sct013: data.sct013 ?? null,
-      waterFlow: data.waterFlow ?? null,
-      gasDetected: data.gasDetected ?? null,
-      level: data.level ?? null,
+      ...data,
       puissance,
       delayMs,
       timestamp: data.timestamp ?? new Date()
@@ -86,11 +83,11 @@ client.on("message", async (topic, message) => {
     await newEntry.save();
     console.log("✅ بيانات MQTT محفوظة. تأخير:", delayMs + "ms");
   } catch (error) {
-    console.error("⚠️ خطأ أثناء معالجة رسالة MQTT:", error);
+    console.error("⚠️ خطأ أثناء معالجة رسالة MQTT:", error.message);
   }
 });
 
-// 🤖 دالة الاتصال بـ DeepSeek (اختياري)
+// 🤖 استدعاء DeepSeek
 async function askDeepSeek(question) {
   if (!process.env.DEEPSEEK_API_KEY) {
     throw new Error("مفتاح DeepSeek غير موجود.");
@@ -120,26 +117,24 @@ async function askDeepSeek(question) {
   }
 }
 
-// 💬 مسار دردشة Chatbot مع دعم بديل محلي
+// 💬 مسار Chatbot
 app.post("/chatbot", async (req, res) => {
   const { question } = req.body;
-  if (!question) return res.status(400).send("يرجى إرسال سؤال.");
+  if (!question) return res.status(400).json({ error: "يرجى إرسال سؤال." });
 
-  // إذا مفتاح DeepSeek موجود، حاول استخدامه
+  // محاولة استخدام DeepSeek
   if (process.env.DEEPSEEK_API_KEY) {
     try {
       const answer = await askDeepSeek(question);
       return res.json({ answer });
     } catch (error) {
-      // لو فشل الاتصال، ننتقل للرد المحلي
       console.warn("⚠️ استخدم الرد المحلي بسبب فشل DeepSeek.");
     }
   }
 
-  // نموذج محلي بسيط للردود حسب كلمات مفتاحية
-  let answer = "عذرًا، لم أفهم السؤال.";
-
+  // ردود محلية بسيطة
   const q = question.toLowerCase();
+  let answer = "عذرًا، لم أفهم السؤال.";
 
   if (q.includes("طاقة")) {
     answer = "الطاقة هي القدرة على أداء الشغل. لتوفير الطاقة، استخدم الأجهزة الكهربائية بحكمة وأطفئها عند عدم الحاجة.";
@@ -152,9 +147,7 @@ app.post("/chatbot", async (req, res) => {
   res.json({ answer });
 });
 
-// ... بقية المسارات كما هي ...
-
-// 📡 المسارات API الأساسية
+// 🌐 مسارات API
 app.get("/", (req, res) => {
   res.send("🚀 الخادم يعمل!");
 });
@@ -164,7 +157,7 @@ app.get("/energy", async (req, res) => {
     const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(2000);
     res.json(data);
   } catch (error) {
-    res.status(500).send("❌ خطأ في جلب البيانات.");
+    res.status(500).json({ error: "❌ خطأ في جلب البيانات." });
   }
 });
 
@@ -188,13 +181,12 @@ app.post("/energy", async (req, res) => {
     const newData = new EnergyModel(req.body);
     await newData.save();
     res.status(201).json({ message: "📊 تم حفظ البيانات بنجاح!" });
-  } catch (error) {
-    res.status(500).send("❌ خطأ أثناء الحفظ.");
+  } catch (err) {
+    res.status(500).json({ error: "❌ خطأ أثناء الحفظ." });
   }
 });
 
-// 📚 توثيق Swagger كما هو...
-
+// 📚 إعداد Swagger
 const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
