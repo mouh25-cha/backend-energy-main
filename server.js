@@ -1,4 +1,3 @@
-// 📦 الاستدعاءات الأولية
 require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
@@ -15,13 +14,13 @@ const axios = require("axios");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// 🔐 إعدادات الأمان والوسيطات
+// إعدادات الأمان والوسيطات
 app.use(cors());
 app.use(express.json());
 app.use(helmet());
 app.use(morgan("combined"));
 
-// ⚙️ تحديد حد للطلبات
+// تحديد حد للطلبات
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
@@ -29,7 +28,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// 🛢️ الاتصال بقاعدة بيانات MongoDB
+// الاتصال بقاعدة بيانات MongoDB
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -37,7 +36,7 @@ mongoose.connect(process.env.MONGO_URI, {
 .then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
 .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// 📊 نموذج بيانات الطاقة
+// نموذج بيانات الطاقة
 const EnergySchema = new mongoose.Schema({
   temperature: Number,
   humidity: Number,
@@ -54,7 +53,7 @@ const EnergySchema = new mongoose.Schema({
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
 
-// 📡 الاتصال بخادم MQTT
+// الاتصال بخادم MQTT
 const client = mqtt.connect(process.env.MQTT_BROKER);
 
 client.on("connect", () => {
@@ -87,7 +86,7 @@ client.on("message", async (topic, message) => {
   }
 });
 
-// 🤖 استدعاء DeepSeek
+// استدعاء DeepSeek
 async function askDeepSeek(question) {
   if (!process.env.DEEPSEEK_API_KEY) {
     throw new Error("مفتاح DeepSeek غير موجود.");
@@ -117,12 +116,11 @@ async function askDeepSeek(question) {
   }
 }
 
-// 💬 مسار Chatbot
+// مسار Chatbot
 app.post("/chatbot", async (req, res) => {
   const { question } = req.body;
   if (!question) return res.status(400).json({ error: "يرجى إرسال سؤال." });
 
-  // محاولة استخدام DeepSeek
   if (process.env.DEEPSEEK_API_KEY) {
     try {
       const answer = await askDeepSeek(question);
@@ -147,7 +145,7 @@ app.post("/chatbot", async (req, res) => {
   res.json({ answer });
 });
 
-// 🌐 مسارات API
+// مسارات API
 app.get("/", (req, res) => {
   res.send("🚀 الخادم يعمل!");
 });
@@ -186,7 +184,7 @@ app.post("/energy", async (req, res) => {
   }
 });
 
-// 📚 إعداد Swagger
+// إعداد Swagger
 const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
@@ -202,7 +200,7 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// 🚀 تشغيل الخادم
+// تشغيل الخادم
 app.listen(PORT, () => {
   console.log(`🚀 الخادم يعمل على http://localhost:${PORT}`);
 });
