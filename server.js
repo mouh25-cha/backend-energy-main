@@ -14,13 +14,13 @@ const axios = require("axios");
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// إعدادات الأمان والوسيطات
+// Middleware de sécurité et parsing JSON
 app.use(cors());
 app.use(express.json());
 app.use(helmet());
 app.use(morgan("combined"));
 
-// تحديد حد للطلبات
+// Rate limiter pour éviter les abus
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
@@ -28,7 +28,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// الاتصال بقاعدة بيانات MongoDB
+// Connexion MongoDB
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -36,7 +36,7 @@ mongoose.connect(process.env.MONGO_URI, {
 .then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
 .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// نموذج بيانات الطاقة
+// Schéma MongoDB
 const EnergySchema = new mongoose.Schema({
   temperature: Number,
   humidity: Number,
@@ -53,17 +53,17 @@ const EnergySchema = new mongoose.Schema({
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
 
-// الاتصال بخادم MQTT
-const client = mqtt.connect(process.env.MQTT_BROKER);
+// Connexion MQTT
+const mqttClient = mqtt.connect(process.env.MQTT_BROKER);
 
-client.on("connect", () => {
+mqttClient.on("connect", () => {
   console.log("🔗 تم الاتصال بخادم MQTT");
-  client.subscribe("maison/energie", err => {
-    if (err) console.error("❌ فشل الاشتراك:", err);
+  mqttClient.subscribe("maison/energie", err => {
+    if (err) console.error("❌ فشل الاشتراك في MQTT:", err);
   });
 });
 
-client.on("message", async (topic, message) => {
+mqttClient.on("message", async (topic, message) => {
   try {
     const data = JSON.parse(message.toString());
     const now = Date.now();
@@ -86,7 +86,7 @@ client.on("message", async (topic, message) => {
   }
 });
 
-// استدعاء DeepSeek
+// Fonction pour appeler DeepSeek
 async function askDeepSeek(question) {
   if (!process.env.DEEPSEEK_API_KEY) {
     throw new Error("مفتاح DeepSeek غير موجود.");
@@ -116,7 +116,7 @@ async function askDeepSeek(question) {
   }
 }
 
-// مسار Chatbot
+// Route chatbot
 app.post("/chatbot", async (req, res) => {
   const { question } = req.body;
   if (!question) return res.status(400).json({ error: "يرجى إرسال سؤال." });
@@ -130,7 +130,7 @@ app.post("/chatbot", async (req, res) => {
     }
   }
 
-  // ردود محلية بسيطة
+  // ردود محلية بديلة عند عدم وجود API Key أو فشل
   const q = question.toLowerCase();
   let answer = "عذرًا، لم أفهم السؤال.";
 
@@ -145,7 +145,7 @@ app.post("/chatbot", async (req, res) => {
   res.json({ answer });
 });
 
-// مسارات API
+// Routes API
 app.get("/", (req, res) => {
   res.send("🚀 الخادم يعمل!");
 });
@@ -184,7 +184,7 @@ app.post("/energy", async (req, res) => {
   }
 });
 
-// إعداد Swagger
+// Swagger pour doc API
 const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
@@ -200,7 +200,7 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// تشغيل الخادم
+// Démarrage serveur
 app.listen(PORT, () => {
   console.log(`🚀 الخادم يعمل على http://localhost:${PORT}`);
 });
