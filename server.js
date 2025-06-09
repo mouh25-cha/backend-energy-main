@@ -10,26 +10,11 @@ const swaggerUi = require("swagger-ui-express");
 const swaggerJsDoc = require("swagger-jsdoc");
 const Joi = require("joi");
 const axios = require("axios");
-const os = require("os"); // 🆕 لاكتشاف IP
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// دالة للحصول على IP المحلي
-function getLocalIP() {
-  const interfaces = os.networkInterfaces();
-  for (const name in interfaces) {
-    for (const iface of interfaces[name]) {
-      if (iface.family === "IPv4" && !iface.internal) {
-        return iface.address;
-      }
-    }
-  }
-  return "127.0.0.1";
-}
-const HOST = getLocalIP();
-
-// إعدادات وسطية
+// Middleware
 app.use(cors());
 app.use(express.json());
 app.use(helmet());
@@ -43,7 +28,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// اتصال بـ MongoDB
+// MongoDB
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -51,7 +36,7 @@ mongoose.connect(process.env.MONGO_URI, {
 .then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
 .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// نموذج البيانات
+// Schéma des données
 const EnergySchema = new mongoose.Schema({
   temperature: Number,
   humidity: Number,
@@ -100,7 +85,7 @@ mqttClient.on("message", async (topic, message) => {
   }
 });
 
-// DeepSeek
+// DeepSeek AI
 async function askDeepSeek(question) {
   if (!process.env.DEEPSEEK_API_KEY) {
     throw new Error("مفتاح DeepSeek غير موجود.");
@@ -130,7 +115,7 @@ async function askDeepSeek(question) {
   }
 }
 
-// chatbot
+// chatbot endpoint
 app.post("/chatbot", async (req, res) => {
   const { question } = req.body;
   if (!question) return res.status(400).json({ error: "يرجى إرسال سؤال." });
@@ -144,7 +129,7 @@ app.post("/chatbot", async (req, res) => {
     }
   }
 
-  // ردود محلية
+  // Local fallback response
   const q = question.toLowerCase();
   let answer = "عذرًا، لم أفهم السؤال.";
 
@@ -159,7 +144,7 @@ app.post("/chatbot", async (req, res) => {
   res.json({ answer });
 });
 
-// Routes API
+// API routes
 app.get("/", (req, res) => {
   res.send("🚀 الخادم يعمل!");
 });
@@ -207,14 +192,14 @@ const swaggerOptions = {
       version: "1.0.0",
       description: "API لجمع بيانات استهلاك الطاقة والمياه وكشف الغاز"
     },
-    servers: [{ url: `http://${HOST}:${PORT}` }]
+    servers: [{ url: `https://backend-energy-main.onrender.com` }]
   },
   apis: ["server.js"]
 };
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// تشغيل الخادم
-app.listen(PORT, HOST, () => {
-  console.log(`🚀 الخادم يعمل على http://${HOST}:${PORT}`);
+// Lancer le serveur — utiliser 0.0.0.0 pour Render
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 الخادم يعمل على http://0.0.0.0:${PORT}`);
 });
