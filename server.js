@@ -21,13 +21,13 @@ app.use(morgan("combined"));
 
 // Rate limiter
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
+  windowMs: 15 * 60 * 1000, // 15 دقيقة
   max: 1000,
   message: "🚫 تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا."
 });
 app.use(limiter);
 
-// Connexion MongoDB
+// اتصال MongoDB
 mongoose.connect(process.env.MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
@@ -35,7 +35,7 @@ mongoose.connect(process.env.MONGO_URI, {
 .then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
 .catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// Modèle MongoDB
+// موديل بيانات الطاقة
 const EnergySchema = new mongoose.Schema({
   temperature: Number,
   humidity: Number,
@@ -52,7 +52,7 @@ const EnergySchema = new mongoose.Schema({
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
 
-// MQTT
+// اتصال MQTT
 const mqttClient = mqtt.connect(process.env.MQTT_BROKER);
 
 mqttClient.on("connect", () => {
@@ -84,7 +84,7 @@ mqttClient.on("message", async (topic, message) => {
   }
 });
 
-// 🤖 Chatbot simplifié sans DeepSeek
+// 🤖 Chatbot متعدد اللغات
 app.post("/chatbot", async (req, res) => {
   const { question } = req.body;
   if (!question) return res.status(400).json({ error: "يرجى إرسال سؤال." });
@@ -92,21 +92,40 @@ app.post("/chatbot", async (req, res) => {
   const q = question.toLowerCase();
   let answer = "عذرًا، لم أفهم السؤال.";
 
-  if (q.includes("طاقة")) {
+  const arabicEnergyKeywords = ["طاقة", "كهرب", "الطاقة", "استهلاك"];
+  const arabicSavingKeywords = ["توفير", "اقتصاد", "خفض", "تقليل", "فاتورة"];
+
+  const frenchEnergyKeywords = ["énergie", "électrique", "électricité", "consommation"];
+  const frenchSavingKeywords = ["économiser", "réduire", "baisser", "facture", "économie"];
+
+  const englishEnergyKeywords = ["energy", "electricity", "power", "consumption"];
+  const englishSavingKeywords = ["save", "reduce", "lower", "bill", "economy"];
+
+  const containsKeyword = (keywords, text) => keywords.some(k => text.includes(k));
+
+  if (containsKeyword(arabicEnergyKeywords, q)) {
     answer = "استخدم الأجهزة بكفاءة، وأطفئها عند عدم الحاجة.";
-  } else if (q.includes("توفير")) {
+  } else if (containsKeyword(arabicSavingKeywords, q)) {
     answer = "غيّر لمباتك إلى LED، ولا تترك الأجهزة في وضع الاستعداد.";
+  } else if (containsKeyword(frenchEnergyKeywords, q)) {
+    answer = "Utilisez les appareils efficacement et éteignez-les lorsqu'ils ne sont pas nécessaires.";
+  } else if (containsKeyword(frenchSavingKeywords, q)) {
+    answer = "Remplacez vos ampoules par des LED et évitez de laisser les appareils en veille.";
+  } else if (containsKeyword(englishEnergyKeywords, q)) {
+    answer = "Use devices efficiently and turn them off when not needed.";
+  } else if (containsKeyword(englishSavingKeywords, q)) {
+    answer = "Switch to LED bulbs and avoid leaving devices on standby.";
   }
 
   res.json({ answer });
 });
 
-// GET test
+// مسار اختبار السيرفر
 app.get("/", (req, res) => {
   res.send("🚀 الخادم يعمل!");
 });
 
-// API energy
+// API لجلب بيانات الطاقة
 app.get("/energy", async (req, res) => {
   try {
     const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(2000);
@@ -116,6 +135,7 @@ app.get("/energy", async (req, res) => {
   }
 });
 
+// API لإضافة بيانات جديدة
 app.post("/energy", async (req, res) => {
   const schema = Joi.object({
     temperature: Joi.number(),
@@ -141,7 +161,7 @@ app.post("/energy", async (req, res) => {
   }
 });
 
-// Swagger
+// توثيق API باستخدام Swagger
 const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
@@ -152,12 +172,12 @@ const swaggerOptions = {
     },
     servers: [{ url: `http://localhost:${PORT}` }]
   },
-  apis: ["server.js"]
+  apis: ["server.js"] // لو أردت يمكن تعيين مسارات أخرى لوحدات منفصلة
 };
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// 👂 تشغيل الخادم على 0.0.0.0
+// تشغيل السيرفر
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 الخادم يعمل على http://0.0.0.0:${PORT}`);
 });
