@@ -21,21 +21,18 @@ app.use(morgan("combined"));
 
 // Rate limiter
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 دقيقة
+  windowMs: 15 * 60 * 1000,
   max: 1000,
-  message: "🚫 تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا."
+  message: "🚫 تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا.",
 });
 app.use(limiter);
 
-// اتصال MongoDB
-mongoose.connect(process.env.MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true
-})
-.then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
-.catch(err => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
+// Connexion MongoDB (sans options obsolètes)
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
+  .catch((err) => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// موديل بيانات الطاقة
+// Modèle de données
 const EnergySchema = new mongoose.Schema({
   temperature: Number,
   humidity: Number,
@@ -48,16 +45,16 @@ const EnergySchema = new mongoose.Schema({
   level: Number,
   puissance: Number,
   delayMs: Number,
-  timestamp: { type: Date, default: Date.now }
+  timestamp: { type: Date, default: Date.now },
 });
 const EnergyModel = mongoose.model("Energy", EnergySchema);
 
-// اتصال MQTT
+// Connexion MQTT
 const mqttClient = mqtt.connect(process.env.MQTT_BROKER);
 
 mqttClient.on("connect", () => {
   console.log("🔗 تم الاتصال بخادم MQTT");
-  mqttClient.subscribe("maison/energie", err => {
+  mqttClient.subscribe("maison/energie", (err) => {
     if (err) console.error("❌ فشل الاشتراك في MQTT:", err);
   });
 });
@@ -65,16 +62,17 @@ mqttClient.on("connect", () => {
 mqttClient.on("message", async (topic, message) => {
   try {
     const data = JSON.parse(message.toString());
-    const now = Date.now();
-    const dataTime = new Date(data.timestamp).getTime();
-    const delayMs = now - dataTime;
+    const timestamp = new Date(data.timestamp ?? Date.now());
+    if (isNaN(timestamp.getTime())) throw new Error("تاريخ غير صالح");
+
+    const delayMs = Date.now() - timestamp.getTime();
     const puissance = (data.sct013 ?? 0) * (data.voltage ?? 0);
 
     const newEntry = new EnergyModel({
       ...data,
       puissance,
       delayMs,
-      timestamp: data.timestamp ?? new Date()
+      timestamp,
     });
 
     await newEntry.save();
@@ -84,7 +82,7 @@ mqttClient.on("message", async (topic, message) => {
   }
 });
 
-// 🤖 Chatbot متعدد اللغات
+// Chatbot IA multilingue
 app.post("/chatbot", async (req, res) => {
   const { question } = req.body;
   if (!question) return res.status(400).json({ error: "يرجى إرسال سؤال." });
@@ -92,40 +90,31 @@ app.post("/chatbot", async (req, res) => {
   const q = question.toLowerCase();
   let answer = "عذرًا، لم أفهم السؤال.";
 
-  const arabicEnergyKeywords = ["طاقة", "كهرب", "الطاقة", "استهلاك"];
-  const arabicSavingKeywords = ["توفير", "اقتصاد", "خفض", "تقليل", "فاتورة"];
+  const match = (keywords) => keywords.some((k) => q.includes(k));
 
-  const frenchEnergyKeywords = ["énergie", "électrique", "électricité", "consommation"];
-  const frenchSavingKeywords = ["économiser", "réduire", "baisser", "facture", "économie"];
-
-  const englishEnergyKeywords = ["energy", "electricity", "power", "consumption"];
-  const englishSavingKeywords = ["save", "reduce", "lower", "bill", "economy"];
-
-  const containsKeyword = (keywords, text) => keywords.some(k => text.includes(k));
-
-  if (containsKeyword(arabicEnergyKeywords, q)) {
+  if (match(["طاقة", "كهرب", "الطاقة", "استهلاك"])) {
     answer = "استخدم الأجهزة بكفاءة، وأطفئها عند عدم الحاجة.";
-  } else if (containsKeyword(arabicSavingKeywords, q)) {
+  } else if (match(["توفير", "اقتصاد", "خفض", "تقليل", "فاتورة"])) {
     answer = "غيّر لمباتك إلى LED، ولا تترك الأجهزة في وضع الاستعداد.";
-  } else if (containsKeyword(frenchEnergyKeywords, q)) {
+  } else if (match(["énergie", "électrique", "électricité", "consommation"])) {
     answer = "Utilisez les appareils efficacement et éteignez-les lorsqu'ils ne sont pas nécessaires.";
-  } else if (containsKeyword(frenchSavingKeywords, q)) {
+  } else if (match(["économiser", "réduire", "baisser", "facture", "économie"])) {
     answer = "Remplacez vos ampoules par des LED et évitez de laisser les appareils en veille.";
-  } else if (containsKeyword(englishEnergyKeywords, q)) {
+  } else if (match(["energy", "electricity", "power", "consumption"])) {
     answer = "Use devices efficiently and turn them off when not needed.";
-  } else if (containsKeyword(englishSavingKeywords, q)) {
+  } else if (match(["save", "reduce", "lower", "bill", "economy"])) {
     answer = "Switch to LED bulbs and avoid leaving devices on standby.";
   }
 
   res.json({ answer });
 });
 
-// مسار اختبار السيرفر
+// Test serveur
 app.get("/", (req, res) => {
   res.send("🚀 الخادم يعمل!");
 });
 
-// API لجلب بيانات الطاقة
+// Récupération des données
 app.get("/energy", async (req, res) => {
   try {
     const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(2000);
@@ -135,7 +124,7 @@ app.get("/energy", async (req, res) => {
   }
 });
 
-// API لإضافة بيانات جديدة
+// Ajout manuel de données (via POST)
 app.post("/energy", async (req, res) => {
   const schema = Joi.object({
     temperature: Joi.number(),
@@ -146,7 +135,7 @@ app.post("/energy", async (req, res) => {
     sct013: Joi.number(),
     waterFlow: Joi.number(),
     gasDetected: Joi.number(),
-    level: Joi.number()
+    level: Joi.number(),
   });
 
   const { error } = schema.validate(req.body);
@@ -161,23 +150,23 @@ app.post("/energy", async (req, res) => {
   }
 });
 
-// توثيق API باستخدام Swagger
+// Swagger API doc
 const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
     info: {
       title: "API إدارة الطاقة وكشف الغاز",
       version: "1.0.0",
-      description: "API لجمع بيانات استهلاك الطاقة والمياه وكشف الغاز"
+      description: "API لجمع بيانات استهلاك الطاقة والمياه وكشف الغاز",
     },
-    servers: [{ url: `http://localhost:${PORT}` }]
+    servers: [{ url: `http://localhost:${PORT}` }],
   },
-  apis: ["server.js"] // لو أردت يمكن تعيين مسارات أخرى لوحدات منفصلة
+  apis: ["server.js"],
 };
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// تشغيل السيرفر
+// Démarrage serveur
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 الخادم يعمل على http://0.0.0.0:${PORT}`);
 });
