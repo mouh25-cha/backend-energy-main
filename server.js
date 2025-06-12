@@ -9,6 +9,7 @@ const morgan = require("morgan");
 const swaggerUi = require("swagger-ui-express");
 const swaggerJsDoc = require("swagger-jsdoc");
 const Joi = require("joi");
+const axios = require("axios");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -27,7 +28,7 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Connexion MongoDB (sans options obsolètes)
+// Connexion MongoDB
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
   .catch((err) => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
@@ -82,7 +83,7 @@ mqttClient.on("message", async (topic, message) => {
   }
 });
 
-// Chatbot IA multilingue
+// Chatbot avec DeepSeek fallback
 app.post("/chatbot", async (req, res) => {
   const { question } = req.body;
   if (!question) return res.status(400).json({ error: "يرجى إرسال سؤال." });
@@ -106,6 +107,35 @@ app.post("/chatbot", async (req, res) => {
     answer = "Switch to LED bulbs and avoid leaving devices on standby.";
   }
 
+  if (answer === "عذرًا، لم أفهم السؤال.") {
+    try {
+      const response = await axios.post(
+        "https://api.deepseek.com/v1/chat/completions",
+        {
+          model: "deepseek-chat",
+          messages: [
+            {
+              role: "system",
+              content: "أنت مساعد ذكي متخصص في توفير الطاقة المنزلية. أجب دائمًا باللغة العربية إن كانت الرسالة بالعربية.",
+            },
+            { role: "user", content: question },
+          ],
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      answer = response.data.choices[0].message.content;
+    } catch (err) {
+      console.error("❌ خطأ DeepSeek:", err.message);
+      answer = "عذرًا، حدث خطأ أثناء معالجة سؤالك.";
+    }
+  }
+
   res.json({ answer });
 });
 
@@ -124,7 +154,7 @@ app.get("/energy", async (req, res) => {
   }
 });
 
-// Ajout manuel de données (via POST)
+// Ajout manuel de données
 app.post("/energy", async (req, res) => {
   const schema = Joi.object({
     temperature: Joi.number(),
