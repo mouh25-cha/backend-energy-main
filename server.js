@@ -32,6 +32,7 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
   .catch((err) => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
+// Modèle de données
 const EnergySchema = new mongoose.Schema({
   temperature: Number,
   humidity: Number,
@@ -79,38 +80,12 @@ mqttClient.on("message", async (topic, message) => {
   }
 });
 
-// ✅ Chatbot personnalisé avec données réelles
+// 🔮 Chatbot intelligent avec DeepSeek
 app.post("/chatbot", async (req, res) => {
   const { question } = req.body;
   if (!question) return res.status(400).json({ error: "يرجى إرسال سؤال." });
 
   try {
-    const latestData = await EnergyModel.findOne().sort({ timestamp: -1 });
-
-    const dataSummary = latestData
-      ? `
-بيانات الاستهلاك الأخيرة:
-- درجة الحرارة: ${latestData.temperature}°C
-- الرطوبة: ${latestData.humidity}%
-- الجهد الكهربائي: ${latestData.voltage}V
-- التيار (20A): ${latestData.current_20A}A
-- التيار (30A): ${latestData.current_30A}A
-- القدرة الكهربائية: ${latestData.puissance?.toFixed(2)}W
-- تدفق الماء: ${latestData.waterFlow} L/min
-- مستوى تسرب الغاز: ${latestData.gasDetected} ppm
-      `
-      : "لا توجد بيانات استهلاك حديثة.";
-
-    const prompt = `
-أنت مساعد ذكي مختص في تحسين استهلاك الطاقة المنزلية. 
-يجب أن تعتمد في إجابتك على السؤال التالي والمعلومات الحقيقية التالية من منزل المستخدم.
-
-${dataSummary}
-
-سؤال المستخدم:
-${question}
-`;
-
     const response = await axios.post(
       "https://api.deepseek.com/v1/chat/completions",
       {
@@ -118,10 +93,15 @@ ${question}
         messages: [
           {
             role: "system",
-            content:
-              "أنت مساعد متخصص في تقديم نصائح ذكية لتقليل استهلاك الكهرباء والمياه والغاز. أجب دائمًا بلغة المستخدم (عربية، فرنسية، أو إنجليزية).",
+            content: `
+You are a smart assistant who provides personalized and practical energy-saving tips for electricity, water, and gas.
+Always reply in the same language as the user question:
+- If the user writes in Arabic, reply in Arabic.
+- If in French, reply in French.
+- If in English, reply in English.
+Be clear and direct.`,
           },
-          { role: "user", content: prompt },
+          { role: "user", content: question },
         ],
       },
       {
@@ -140,11 +120,6 @@ ${question}
   }
 });
 
-// Endpoint de test
-app.get("/", (req, res) => {
-  res.send("🚀 الخادم يعمل!");
-});
-
 // Récupération des données
 app.get("/energy", async (req, res) => {
   try {
@@ -155,7 +130,7 @@ app.get("/energy", async (req, res) => {
   }
 });
 
-// Insertion manuelle
+// Ajout manuel
 app.post("/energy", async (req, res) => {
   const schema = Joi.object({
     temperature: Joi.number(),
@@ -181,7 +156,7 @@ app.post("/energy", async (req, res) => {
   }
 });
 
-// Swagger
+// Swagger documentation
 const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
@@ -197,7 +172,12 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// Démarrage du serveur
+// Serveur
+app.get("/", (req, res) => {
+  res.send("🚀 الخادم يعمل!");
+});
+
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 الخادم يعمل على http://0.0.0.0:${PORT}`);
 });
+
