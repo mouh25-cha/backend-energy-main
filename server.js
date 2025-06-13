@@ -20,7 +20,7 @@ app.use(express.json());
 app.use(helmet());
 app.use(morgan("combined"));
 
-// Rate limiter
+// Limiteur de requêtes
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
@@ -52,14 +52,12 @@ const EnergyModel = mongoose.model("Energy", EnergySchema);
 
 // Connexion MQTT
 const mqttClient = mqtt.connect(process.env.MQTT_BROKER);
-
 mqttClient.on("connect", () => {
   console.log("🔗 تم الاتصال بخادم MQTT");
   mqttClient.subscribe("maison/energie", (err) => {
     if (err) console.error("❌ فشل الاشتراك في MQTT:", err);
   });
 });
-
 mqttClient.on("message", async (topic, message) => {
   try {
     const data = JSON.parse(message.toString());
@@ -83,7 +81,7 @@ mqttClient.on("message", async (topic, message) => {
   }
 });
 
-// Chatbot IA (DeepSeek uniquement)
+// 💬 Chatbot avec DeepSeek
 app.post("/chatbot", async (req, res) => {
   const { question } = req.body;
   if (!question) return res.status(400).json({ error: "يرجى إرسال سؤال." });
@@ -96,7 +94,7 @@ app.post("/chatbot", async (req, res) => {
         messages: [
           {
             role: "system",
-            content: "أنت مساعد ذكي متخصص في توفير الطاقة المنزلية. أجب دائمًا باللغة العربية إن كانت الرسالة بالعربية.",
+            content: "أنت مساعد ذكي يقدم نصائح دقيقة حول توفير الطاقة المنزلية. أجب بنفس لغة المستخدم (العربية، الفرنسية، أو الإنجليزية).",
           },
           { role: "user", content: question },
         ],
@@ -117,7 +115,7 @@ app.post("/chatbot", async (req, res) => {
   }
 });
 
-// Test serveur
+// Endpoint de test
 app.get("/", (req, res) => {
   res.send("🚀 الخادم يعمل!");
 });
@@ -132,7 +130,7 @@ app.get("/energy", async (req, res) => {
   }
 });
 
-// Ajout manuel de données
+// Ajout manuel
 app.post("/energy", async (req, res) => {
   const schema = Joi.object({
     temperature: Joi.number(),
@@ -158,7 +156,7 @@ app.post("/energy", async (req, res) => {
   }
 });
 
-// Swagger API doc
+// Swagger
 const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
@@ -174,7 +172,7 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// Démarrage serveur
+// Démarrage du serveur
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 الخادم يعمل على http://0.0.0.0:${PORT}`);
 });
