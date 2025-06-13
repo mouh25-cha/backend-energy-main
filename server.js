@@ -83,60 +83,38 @@ mqttClient.on("message", async (topic, message) => {
   }
 });
 
-// Chatbot avec DeepSeek fallback
+// Chatbot IA (DeepSeek uniquement)
 app.post("/chatbot", async (req, res) => {
   const { question } = req.body;
   if (!question) return res.status(400).json({ error: "يرجى إرسال سؤال." });
 
-  const q = question.toLowerCase();
-  let answer = "عذرًا، لم أفهم السؤال.";
-
-  const match = (keywords) => keywords.some((k) => q.includes(k));
-
-  if (match(["طاقة", "كهرب", "الطاقة", "استهلاك"])) {
-    answer = "استخدم الأجهزة بكفاءة، وأطفئها عند عدم الحاجة.";
-  } else if (match(["توفير", "اقتصاد", "خفض", "تقليل", "فاتورة"])) {
-    answer = "غيّر لمباتك إلى LED، ولا تترك الأجهزة في وضع الاستعداد.";
-  } else if (match(["énergie", "électrique", "électricité", "consommation"])) {
-    answer = "Utilisez les appareils efficacement et éteignez-les lorsqu'ils ne sont pas nécessaires.";
-  } else if (match(["économiser", "réduire", "baisser", "facture", "économie"])) {
-    answer = "Remplacez vos ampoules par des LED et évitez de laisser les appareils en veille.";
-  } else if (match(["energy", "electricity", "power", "consumption"])) {
-    answer = "Use devices efficiently and turn them off when not needed.";
-  } else if (match(["save", "reduce", "lower", "bill", "economy"])) {
-    answer = "Switch to LED bulbs and avoid leaving devices on standby.";
-  }
-
-  if (answer === "عذرًا، لم أفهم السؤال.") {
-    try {
-      const response = await axios.post(
-        "https://api.deepseek.com/v1/chat/completions",
-        {
-          model: "deepseek-chat",
-          messages: [
-            {
-              role: "system",
-              content: "أنت مساعد ذكي متخصص في توفير الطاقة المنزلية. أجب دائمًا باللغة العربية إن كانت الرسالة بالعربية.",
-            },
-            { role: "user", content: question },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-            "Content-Type": "application/json",
+  try {
+    const response = await axios.post(
+      "https://api.deepseek.com/v1/chat/completions",
+      {
+        model: "deepseek-chat",
+        messages: [
+          {
+            role: "system",
+            content: "أنت مساعد ذكي متخصص في توفير الطاقة المنزلية. أجب دائمًا باللغة العربية إن كانت الرسالة بالعربية.",
           },
-        }
-      );
+          { role: "user", content: question },
+        ],
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
 
-      answer = response.data.choices[0].message.content;
-    } catch (err) {
-      console.error("❌ خطأ DeepSeek:", err.message);
-      answer = "عذرًا، حدث خطأ أثناء معالجة سؤالك.";
-    }
+    const answer = response.data.choices[0].message.content;
+    res.json({ answer });
+  } catch (err) {
+    console.error("❌ خطأ DeepSeek:", err.message);
+    res.status(500).json({ answer: "عذرًا، حدث خطأ أثناء معالجة سؤالك." });
   }
-
-  res.json({ answer });
 });
 
 // Test serveur
