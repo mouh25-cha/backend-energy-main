@@ -3,7 +3,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const mqtt = require("mqtt");
 const cors = require("cors");
-const helmet = require("helmet");
+const helmet = require("helmet"); donne le code correct de server.js 
 const rateLimit = require("express-rate-limit");
 const morgan = require("morgan");
 const swaggerUi = require("swagger-ui-express");
@@ -20,7 +20,6 @@ app.use(express.json());
 app.use(helmet());
 app.use(morgan("combined"));
 
-// Rate limiter
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
@@ -77,11 +76,11 @@ mqttClient.on("message", async (topic, message) => {
     await newEntry.save();
     console.log("✅ بيانات MQTT محفوظة. تأخير:", delayMs + "ms");
   } catch (error) {
-    console.error("⚠️ خطأ أثناء معالجة رسالة MQTT:", error.message);
+    console.error("⚠ خطأ أثناء معالجة رسالة MQTT:", error.message);
   }
 });
 
-// 🔮 Chatbot intelligent
+// 🔮 Chatbot intelligent avec DeepSeek
 app.post("/chatbot", async (req, res) => {
   const { question } = req.body;
   if (!question) return res.status(400).json({ error: "يرجى إرسال سؤال." });
@@ -107,7 +106,7 @@ Be clear and direct.`,
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+          Authorization: Bearer ${process.env.DEEPSEEK_API_KEY},
           "Content-Type": "application/json",
         },
       }
@@ -121,24 +120,17 @@ Be clear and direct.`,
   }
 });
 
-// 🔄 Route GET /energy avec paramètre ?hours
+// Récupération des données
 app.get("/energy", async (req, res) => {
   try {
-    const hours = parseInt(req.query.hours) || 1; // par défaut 1 heure
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-    const data = await EnergyModel.find({ timestamp: { $gte: since } })
-      .sort({ timestamp: -1 })
-      .limit(2000);
-
+    const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(2000);
     res.json(data);
   } catch (error) {
-    console.error("❌ خطأ في جلب البيانات:", error.message);
     res.status(500).json({ error: "❌ خطأ في جلب البيانات." });
   }
 });
 
-// Ajout manuel de données
+// Ajout manuel
 app.post("/energy", async (req, res) => {
   const schema = Joi.object({
     temperature: Joi.number(),
@@ -173,19 +165,18 @@ const swaggerOptions = {
       version: "1.0.0",
       description: "API لجمع بيانات استهلاك الطاقة والمياه وكشف الغاز",
     },
-    servers: [{ url: `http://localhost:${PORT}` }],
+    servers: [{ url: http://localhost:${PORT} }],
   },
   apis: ["server.js"],
 };
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// Home route
+// Serveur
 app.get("/", (req, res) => {
   res.send("🚀 الخادم يعمل!");
 });
 
-// Démarrage du serveur
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 الخادم يعمل على http://0.0.0.0:${PORT}`);
+  console.log(🚀 الخادم يعمل على http://0.0.0.0:${PORT});
 });
