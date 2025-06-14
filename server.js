@@ -143,7 +143,7 @@ app.get("/energy/all", async (req, res) => {
   try {
     const data = await EnergyModel.find()
       .sort({ timestamp: -1 })
-      .limit(50);
+      .limit(150);
 
     res.json(data);
   } catch (error) {
@@ -203,4 +203,3 @@ app.get("/", (req, res) => {
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 الخادم يعمل على http://0.0.0.0:${PORT}`);
 });
-S
