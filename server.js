@@ -125,7 +125,7 @@ Be clear and direct.`,
 app.get("/energy", async (req, res) => {
   try {
     const hours = parseInt(req.query.hours) || 1; // par défaut 1 heure
-    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const data = await EnergyModel.find({ timestamp: { $gte: since } })
       .sort({ timestamp: -1 })
