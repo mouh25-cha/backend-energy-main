@@ -124,7 +124,7 @@ Be clear and direct.`,
 // 🔄 ✅ Route corrigée: données de la dernière heure
 app.get("/energy", async (req, res) => {
   try {
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+     const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000)
     const data = await EnergyModel.find({ timestamp: { $gte: oneHourAgo } })
                                   .sort({ timestamp: -1 });
     res.json(data);
