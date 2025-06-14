@@ -20,6 +20,7 @@ app.use(express.json());
 app.use(helmet());
 app.use(morgan("combined"));
 
+// Rate limiter
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
@@ -80,7 +81,7 @@ mqttClient.on("message", async (topic, message) => {
   }
 });
 
-// 🔮 Chatbot intelligent avec DeepSeek
+// 🔮 Chatbot intelligent
 app.post("/chatbot", async (req, res) => {
   const { question } = req.body;
   if (!question) return res.status(400).json({ error: "يرجى إرسال سؤال." });
@@ -120,17 +121,19 @@ Be clear and direct.`,
   }
 });
 
-// Récupération des données
+// 🔄 ✅ Route corrigée: données de la dernière heure
 app.get("/energy", async (req, res) => {
   try {
-    const data = await EnergyModel.find().sort({ timestamp: -1 }).limit(2000);
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    const data = await EnergyModel.find({ timestamp: { $gte: oneHourAgo } })
+                                  .sort({ timestamp: -1 });
     res.json(data);
   } catch (error) {
     res.status(500).json({ error: "❌ خطأ في جلب البيانات." });
   }
 });
 
-// Ajout manuel
+// Ajout manuel de données
 app.post("/energy", async (req, res) => {
   const schema = Joi.object({
     temperature: Joi.number(),
@@ -172,12 +175,12 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// Serveur
+// Home route
 app.get("/", (req, res) => {
   res.send("🚀 الخادم يعمل!");
 });
 
+// Démarrage du serveur
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 الخادم يعمل على http://0.0.0.0:${PORT}`);
 });
-
