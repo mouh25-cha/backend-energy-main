@@ -26,7 +26,15 @@ const limiter = rateLimit({
   max: 1000,
   message: "🚫 تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا.",
 });
-app.use(limiter);
+
+// ✅ استثناء مسار /energy/all من التقييد
+app.use((req, res, next) => {
+  if (req.path === "/energy/all") {
+    return next();
+  } else {
+    limiter(req, res, next);
+  }
+});
 
 // Connexion MongoDB
 mongoose.connect(process.env.MONGO_URI)
@@ -138,12 +146,12 @@ app.get("/energy", async (req, res) => {
   }
 });
 
-// ✅ Route GET /energy/all — retourne les 2000 dernières données sans filtre de temps
+// ✅ Route GET /energy/all — retourne les 150 dernières données sans filtre de temps
 app.get("/energy/all", async (req, res) => {
   try {
     const data = await EnergyModel.find()
       .sort({ timestamp: -1 })
-      .limit(40);
+      .limit(150);
 
     res.json(data);
   } catch (error) {
