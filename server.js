@@ -121,14 +121,19 @@ Be clear and direct.`,
   }
 });
 
-// 🔄 ✅ Route corrigée: données de la dernière heure
+// 🔄 Route GET /energy avec paramètre ?hours
 app.get("/energy", async (req, res) => {
   try {
-     const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000)
-    const data = await EnergyModel.find({ timestamp: { $gte: oneHourAgo } })
-                                  .sort({ timestamp: -1 });
+    const hours = parseInt(req.query.hours) || 1; // par défaut 1 heure
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+    const data = await EnergyModel.find({ timestamp: { $gte: since } })
+      .sort({ timestamp: -1 })
+      .limit(2000);
+
     res.json(data);
   } catch (error) {
+    console.error("❌ خطأ في جلب البيانات:", error.message);
     res.status(500).json({ error: "❌ خطأ في جلب البيانات." });
   }
 });
