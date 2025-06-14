@@ -121,7 +121,7 @@ Be clear and direct.`,
   }
 });
 
-// Route GET /energy?hours=X
+// ✅ Route GET /energy?hours=X
 app.get("/energy", async (req, res) => {
   try {
     const hours = parseInt(req.query.hours) || 1;
@@ -135,6 +135,20 @@ app.get("/energy", async (req, res) => {
   } catch (error) {
     console.error("❌ خطأ في جلب البيانات:", error);
     res.status(500).json({ error: "❌ خطأ في جلب البيانات." });
+  }
+});
+
+// ✅ Route GET /energy/all — retourne les 2000 dernières données sans filtre de temps
+app.get("/energy/all", async (req, res) => {
+  try {
+    const data = await EnergyModel.find()
+      .sort({ timestamp: -1 })
+      .limit(2000);
+
+    res.json(data);
+  } catch (error) {
+    console.error("❌ خطأ في جلب جميع البيانات:", error);
+    res.status(500).json({ error: "❌ خطأ في جلب جميع البيانات." });
   }
 });
 
