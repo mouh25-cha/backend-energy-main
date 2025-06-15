@@ -20,20 +20,15 @@ app.use(express.json());
 app.use(helmet());
 app.use(morgan("combined"));
 
-// Rate limiter
+// ✅ Limiteur de requêtes sauf /energy/all
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
   message: "🚫 تم تجاوز الحد الأقصى للطلبات. يرجى المحاولة لاحقًا.",
 });
-
-// ✅ استثناء مسار /energy/all من التقييد
 app.use((req, res, next) => {
-  if (req.path === "/energy/all") {
-    return next();
-  } else {
-    limiter(req, res, next);
-  }
+  if (req.path === "/energy/all") return next();
+  else limiter(req, res, next);
 });
 
 // Connexion MongoDB
@@ -41,7 +36,7 @@ mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("💾 تم الاتصال بقاعدة بيانات MongoDB"))
   .catch((err) => console.error("❌ خطأ في الاتصال بقاعدة البيانات:", err));
 
-// Modèle de données
+// Schéma Mongoose
 const EnergySchema = new mongoose.Schema({
   temperature: Number,
   humidity: Number,
@@ -89,12 +84,44 @@ mqttClient.on("message", async (topic, message) => {
   }
 });
 
-// Chatbot intelligent
+// ✅ Chatbot avec prédiction + alerte gaz
 app.post("/chatbot", async (req, res) => {
   const { question } = req.body;
   if (!question) return res.status(400).json({ error: "يرجى إرسال سؤال." });
 
   try {
+    const latestData = await EnergyModel.findOne().sort({ timestamp: -1 });
+
+    let stats = "Aucune donnée récente disponible.";
+    let alertMessage = "";
+
+    if (latestData) {
+      const {
+        temperature,
+        humidity,
+        voltage,
+        puissance,
+        waterFlow,
+        gasDetected,
+      } = latestData;
+
+      stats = `📊 Dernières données :
+Température : ${temperature} °C
+Humidité : ${humidity} %
+Tension : ${voltage} V
+Puissance : ${puissance} W
+Débit d'eau : ${waterFlow} L/min
+Gaz détecté : ${gasDetected} ppm`;
+
+      if (gasDetected > 3000) {
+        alertMessage = "🚨 *Niveau de danger : Gaz détecté > 3000 ppm !*";
+      } else if (gasDetected > 1000) {
+        alertMessage = "⚠️ *Niveau d'attention : Gaz entre 1000 et 3000 ppm.*";
+      } else {
+        alertMessage = "✅ *Niveau de sécurité : Gaz < 1000 ppm.*";
+      }
+    }
+
     const response = await axios.post(
       "https://api.deepseek.com/v1/chat/completions",
       {
@@ -110,7 +137,10 @@ Always reply in the same language as the user question:
 - If in English, reply in English.
 Be clear and direct.`,
           },
-          { role: "user", content: question },
+          {
+            role: "user",
+            content: `${alertMessage}\n\n${stats}\n\n${question}`,
+          },
         ],
       },
       {
@@ -129,7 +159,7 @@ Be clear and direct.`,
   }
 });
 
-// ✅ Route GET /energy?hours=X
+// Récupération des données récentes
 app.get("/energy", async (req, res) => {
   try {
     const hours = parseInt(req.query.hours) || 1;
@@ -146,7 +176,7 @@ app.get("/energy", async (req, res) => {
   }
 });
 
-// ✅ Route GET /energy/all — retourne les 150 dernières données sans filtre de temps
+// Toutes les données (limité à 50)
 app.get("/energy/all", async (req, res) => {
   try {
     const data = await EnergyModel.find()
@@ -160,7 +190,7 @@ app.get("/energy/all", async (req, res) => {
   }
 });
 
-// Ajouter des données manuellement
+// Ajout manuel
 app.post("/energy", async (req, res) => {
   const schema = Joi.object({
     temperature: Joi.number(),
@@ -186,7 +216,7 @@ app.post("/energy", async (req, res) => {
   }
 });
 
-// Swagger
+// Swagger Docs
 const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
@@ -202,12 +232,12 @@ const swaggerOptions = {
 const swaggerDocs = swaggerJsDoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocs));
 
-// Root
+// Route de test
 app.get("/", (req, res) => {
   res.send("🚀 الخادم يعمل!");
 });
 
-// Start server
+// Lancement du serveur
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 الخادم يعمل على http://0.0.0.0:${PORT}`);
 });
