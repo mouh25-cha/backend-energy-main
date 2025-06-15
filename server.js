@@ -167,7 +167,7 @@ app.get("/energy", async (req, res) => {
 
     const data = await EnergyModel.find({ timestamp: { $gte: since } })
       .sort({ timestamp: -1 })
-      .limit(200);
+      .limit(300);
 
     res.json(data);
   } catch (error) {
